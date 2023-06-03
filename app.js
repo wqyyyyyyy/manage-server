@@ -6,9 +6,12 @@ const onerror = require('koa-onerror')
 const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
 const log4js = require('./utils/log4j')
+const util = require("./utils/util")
 
 
 const users = require('./routes/users')
+const jwt = require('jsonwebtoken')
+const koajwt = require('koa-jwt')
 const router = require("koa-router")()
 
 require("./config/db")
@@ -34,15 +37,23 @@ app.use(views(__dirname + '/views', {
 app.use(async (ctx, next) => {
   log4js.info(`get params:${JSON.stringify(ctx.request.query)}`)
   log4js.info(`post params:${JSON.stringify(ctx.request.body)}`)
-  const start = new Date()
-  await next()
-  
-  const ms = new Date() - start
-  console.log(`${ctx.method} ${ctx.url} - ${ms}ms`)
+  await next().catch((err) => {
+    if(err.status == '401') {
+      ctx.status = 200
+      ctx.body = util.fail('token认证失败',util.CODE.AUTH_ERROR)
+    }else{
+      throw err;
+    }
+  })
 })
-
+app.use(koajwt({secret:'imooc'}).unless({path: [/^\/api\/user\/login/]}))
 // routes
 router.prefix("/api")
+router.get("/leave/count", (ctx) => {
+  const token = ctx.request.headers.authorization.split(' ')[1]
+  const payload = jwt.verify(token,'imooc')
+  ctx.body = payload
+})
 router.use(users.routes(), users.allowedMethods())
 app.use(router.routes(),router.allowedMethods())
 // app.use(users.routes(), users.allowedMethods())
